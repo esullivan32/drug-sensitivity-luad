@@ -1,0 +1,214 @@
+---
+title: "Target Diversity and Sensitivity Variability in Lung Adenocarcinoma Drug Response"
+author: "Emmie Sullivan"
+date: "2025-06-03"
+output: html_document
+
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+#load in necessary libraries
+library(tidyverse)
+library(ggplot2)
+
+library(knitr)
+
+
+theme_update(
+  axis.title = element_text(size = 14),
+  axis.text = element_text(size = 12),
+  title = element_text(size = 15)
+)
+
+
+theme_set(theme_classic())
+
+opts_knit$set(eval.after = 'fig.cap')
+```
+
+**I. Literature Review**
+
+Worldwide, lung cancer ranks as the leading cause of both cancer incidence and mortality (Thandra et al. 2021). Lung adenocarcinoma is the most common form of primary lung cancer in the U.S. and a major subtype of non-small cell lung cancer. Strongly linked to smoking but also common in non-smokers, it typically arises in the lung periphery and accounts for about 40% of all lung cancers. Despite declines in incidence and mortality, it remains the leading cause of cancer death in the U.S. Because most lung adenocarcinomas are diagnosed at an advanced or incurable stage, chemotherapy drugs are commonly used as a treatment option (Meyers et al., 2025). A wide range of anticancer drugs have been employed in the treatment of lung adenocarcinoma. Understanding how precisely a drug interacts with its biological targets is a critical aspect of cancer pharmacology. Some therapies are designed to affect a single molecular pathway, while others act across multiple targets. This project investigates the specificity of drugs by quantifying how many molecular targets and pathways each anticancer drug is associated with. Cancer drugs are often classified through their molecular targets or cellular processes they interfere with. Although it may seem counterintuitive, past studies have shown that anticancer drugs that target multiple pathways can sometimes be more effective, likely because cancer itself involves complex, heterogeneous genetic and molecular alterations (Tao et al., 2015). For example, clinically successful kinase inhibitors often inhibit multiple kinases or pathways, which can improve therapeutic efficacy and reduce drug resistance (Chen et al., 2019). Similarly, drugs originally developed to inhibit specific oncogenic drivers frequently show activity across several targets, contributing to both their therapeutic effects and side effect profiles (Shoshan and Linder, 2008). 
+Several studies have explored the relationship between anticancer drugs and their molecular targets, focusing on how drug specificity impacts treatment efficacy and toxicity. For example, Shoshan and Linder (2008) examined the paradox that drugs designed to be highly specific often interact with multiple targets, which can influence both their therapeutic success and side effects. Additionally, Tao et al. in 2015 analyzed 159 multi-target drugs, finding that a high proportion of clinically successful drugs co-target pathways. The results suggest that this multi-targeting strategy contributes significantly to therapeutic effectiveness. As for the data available on this project, there exist several drug-focused biomedical resources that compile information about anticancer drugs that are in use. For example, in Tao et al. (2015), the authors gathered data on approved, clinical trial, and discontinued multi-target anticancer drugs from the 2010 Thomson Reuters Pharma database, the 2014 Therapeutic Target Database (TTD), and a 2014 PhRMA report. Another related dataset is the Cancer Cell Line Encyclopedia (CCLE), a comprehensive resource that provides genetic, transcriptomic, and pharmacologic data for hundreds of human cancer cell lines to support cancer biology and drug response research (Depmap 2024).
+
+Although targeted therapies are often developed to act on a single molecular target, many drugs interact with multiple proteins, raising questions about how this specificity—or lack thereof—affects drug response. While polypharmacology may enhance efficacy in some contexts, it remains unclear whether the number of distinct molecular targets a drug engages correlates with variability in sensitivity among cancer cells of the same type. In other words, does targeting more proteins make a drug’s performance more consistent across cell lines within a single cancer type, or does it lead to greater variability? This study investigates that question by quantifying how the number of protein targets associated with each drug relates to response variability within cancer types. Using molecular target annotations and large-scale drug sensitivity data, the goal is to assess whether broader targeting strategies are linked to more unpredictable outcomes, or whether highly specific drugs produce more uniform responses. Prior work has shown that multi-target drugs may offer clinical advantages by co-targeting escape pathways and improving overall efficacy (Tao et al. 2015), while other studies highlight that even so-called "targeted therapies" often act through broader off-target effects that contribute to their success (Shoshan and Linder 2008). These findings suggest that the number of molecular targets may shape not only drug potency but also its predictability across biological contexts. Guided by this evidence, I ask whether drug sensitivity variation within a cancer type correlates with the diversity of a drug’s molecular targets. I hypothesize that drugs with a greater number of molecular targets will exhibit higher variability in sensitivity across cell lines of the same cancer type, while drugs with fewer targets will exhibit less variability.
+
+**II. Methods**
+
+The dataset being used for this project is the anticancer drug dataset from Genomics of Drug Sensitivity in Cancer (GCSD). On the GCSD website, you can choose between downloading a Drug Dataset or a Genetic features dataset. The overall dataset can be filtered by Screening Set (GDSC1 or GDSC2), Target Pathway, and Cancer Type (e.g., Acute myeloid leukemia, Lung adenocarcinoma,  Skin cutaneous melanoma). For my study, I will be using a subset of the dataset focused specifically on lung adenocarcinoma cell lines from Screening Set GDSC1. This subset includes information such as drug name, drug ID, molecular targets, associated pathways, genomic features such as mutations and copy number alterations, IC50-related summary statistics including effect size, log mean IC50 values, and variance, as well as tissue type and screening metadata.
+
+A database like the Genomics of Drug Sensitivity in Cancer (GDSC) Dataset is a helpful resource for answering questions like these as it is a publicly available dataset that “integrates heterogeneous molecular data of 11,289 tumors and 1,001 cell lines” as well as measuring “the response of 1,001 cancer cell lines to 265 anti-cancer drugs” (Iorio et al, 2016). The GDSC combines extensive drug response and genomic data to support the identification of novel biomarkers for cancer treatment (Yang et al, 2013). An advantage to all of these types of datasets is that most of them are constantly updated with new features as well as new data itself. In recent releases, GDSC added 130,612 new IC50 values, introduced 36 previously unreleased compounds to the GDSC1 dataset, and expanded the GDSC2 dataset with data from 160 additional cell lines and 99 new compounds. Releases also address possible bugs in the dataset. 
+To carry out my workflow plan, I will load the LUAD drug response dataset, selecting only relevant columns for clarity. I will then examine the dataset for missing or blank values, particularly focusing on columns such as `Drug.ID`, `Drug.target`, and IC50 effect size to ensure data completeness.
+
+IC50, or the half-maximal inhibitory concentration, is a commonly used measure of drug potency that indicates the concentration of a drug required to inhibit a biological process by 50%. It serves as an important indicator of how sensitive a cell line is to a particular drug. In this study, I will use the `feature_delta_mean_ic50` column for my calculations, as it represents the difference in mean IC50 values between groups defined by molecular features, providing a more refined measure of drug sensitivity variation related to specific biomarkers.
+
+```{r data-import}
+#read in the dataset from GDSC, omitting some columns that are not needed for better ease of viewing
+drug_LUAD <- read.csv("~/Downloads/LUAD_ANOVA_Tue Jun  3 17_01_55 2025.csv") %>% 
+  select(-log_max_conc_tested, -log_max_conc_tested_2, -tissue_pval, -msi_pval)
+
+head(drug_LUAD)
+```
+
+```{r data tidying, initial calculations}
+target_counts <- drug_LUAD %>%
+  filter(Drug.target != '') %>%
+  group_by(Drug.name) %>%
+  summarise(
+    n_targets = length(unique(trimws(unlist(strsplit(first(Drug.target), ",")))))
+  )
+```
+
+
+```{r preliminary visualization}
+counts <- target_counts %>%
+  group_by(n_targets) %>%
+  summarise(n_drugs = n(), .groups = "drop")
+
+ggplot(counts, aes(x = factor(n_targets), y = n_drugs)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Number of Drugs by Number of Targets",
+    x = "Number of Targets",
+    y = "Number of Drugs"
+  ) 
+```
+
+**Figure 1.Distribution of the number of targets per drug.** Most drugs have a single target, with the number of drugs sharply decreasing as the number of targets increases.
+
+As an initial step in my analysis,I will count the number of unique molecular targets per drug by parsing the `Drug.target` information. This involves splitting the target strings by commas, trimming any extra spaces, and counting the distinct targets per drug — a step for which I used code assistance from ChatGPT.
+
+I created a preliminary visualization showing the distribution of drugs by their number of molecular targets. This bar plot provides an overview of how many drugs fall into each category of target count, allowing me to understand the composition of the dataset in terms of target specificity before exploring how target number relates to variability in drug sensitivity. This visualization helps contextualize subsequent analyses by revealing whether most drugs act on a few targets or many, which is important for interpreting patterns in IC50 variability (See **Figure 1**).
+
+Next, I will summarize the data by grouping it by drug name, calculating the standard deviation of the `feature_delta_mean_ic50` values across LUAD cell lines to quantify variability in drug sensitivity. 
+
+To compare variability across groups, I will classify drugs into three categories based on the number of targets: low (one target), medium (two to three targets), and high (more than three targets) specificity. Then, I will calculate the average IC₅₀ variability and its standard error within each specificity category using the `calcSE` function provided by my professor, Rob Porch.
+
+For visualization, I will generate scatterplots to explore the relationship between the number of drug targets and IC50 variability. Additionally, I will produce bar plots with error bars representing standard errors to compare average IC50 variability among the specificity categories. 
+
+This workflow will provide insight into how target diversity relates to drug sensitivity variability in lung adenocarcinoma, potentially revealing whether drugs with fewer targets tend to produce more consistent responses.
+
+
+**III. Results**
+
+Figure 1 shows the distribution of drugs by the number of molecular targets they engage. The majority of drugs in the dataset are associated with only one target, and the number of drugs sharply decreases as the number of targets increases. Analysis of drug sensitivity variation within lung adenocarcinoma cell lines revealed a relationship between the number of molecular targets a drug engages and the variability of its response. Figure 2 shows that drugs with a higher number of targets tend to have lower average IC50 standard deviations, indicating more consistent sensitivity across cell lines. 
+
+Figure 3 addresses the study’s hypothesis by comparing average IC50 standard deviation across different levels of drug specificity. While there is little difference between the low and medium specificity groups, the high specificity group shows a noticeably higher average IC50 variability. This finding supports the hypothesis that drugs with a greater number of molecular targets may result in more variable responses across cell lines. In contrast, drugs with smaller target profiles appear to yield less varied sensitivity outcomes.
+
+
+```{r}
+drug_summary <- drug_LUAD %>%
+  filter(Drug.target != '') %>%
+  group_by(Drug.name) %>%
+  summarise(
+    ic50_sd = sd(feature_delta_mean_ic50, na.rm = TRUE),
+    ic50_range = max(feature_delta_mean_ic50, na.rm = TRUE) - min(feature_delta_mean_ic50, na.rm = TRUE),
+    n_features = n_distinct(Feature.Name)
+  ) %>%
+  left_join(target_counts, by = "Drug.name")
+```
+
+
+```{r}
+
+
+avg_per_target <- drug_summary %>% 
+  group_by(n_targets) %>% 
+  summarize(avg_ic50_sd = mean(ic50_sd, na.rm = TRUE))
+
+ggplot(drug_summary, aes(x = factor(n_targets), y = ic50_sd, size = n_features)) +
+  geom_point(alpha = 0.6) +   # individual points
+  geom_point(data = avg_per_target, aes(x = factor(n_targets), y = avg_ic50_sd), 
+             color = "red", size = 4) +   # averages red points
+  labs(title = "IC50 variation vs. Number of Targets",
+       x = "Number of Targets", y = "IC50 Standard Deviation")
+
+```
+
+**Figure 2. Relationship between number of drug targets and IC50 variability.**  The scatter plot shows that the standard deviation of IC50 values decreases as the number of targets increases. Points representing higher feature counts tend to have lower IC50 standard deviations.
+
+
+
+```{r}
+
+calcSE <- function(x){
+  x <- x[!is.na(x)]
+  sd(x)/sqrt(length(x))
+}
+
+
+drug_summary2 <- drug_summary %>%
+  filter(!is.na(n_targets)) %>%
+  mutate(specificity_score = case_when(
+    n_targets == 1 ~ "Low",
+    n_targets %in% 2:3 ~ "Med",
+    n_targets > 3 ~ "High"
+  )) %>%
+  mutate(specificity_score = factor(specificity_score, levels = c("Low", "Med", "High"))) %>%
+  group_by(specificity_score) %>%
+  summarise(
+    avg_ic50_sd = mean(ic50_sd, na.rm = TRUE),
+    se = calcSE(ic50_sd)
+  )
+
+ggplot(drug_summary2, aes(x = factor(specificity_score), y = avg_ic50_sd)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = avg_ic50_sd - se, ymax = avg_ic50_sd + se), width = 0.6) +
+  labs(
+    x = "Target Specificity Score",
+    y = "Avg IC50 SD per Specificity Level"
+  )
+
+
+
+```
+
+**Figure 3. Average IC50 standard deviation across specificity score categories.** The plot shows that the average IC50 variability increases as specificity score increases. While there is no significant difference between low and medium specificity groups, the high specificity group exhibits a noticeably higher average IC50 standard deviation.
+
+
+**IV. Discussion**
+
+This study investigated whether a drug’s molecular target breadth is associated with variation in drug sensitivity across cancer cell lines of the same type. The primary finding displayed in Figure 3 demonstrates that drugs with higher specificity scores show greater variability in sensitivity across cell lines within a cancer type. This pattern supports the hypothesis that highly specific drugs yield less predictable responses, while broader-spectrum drugs produce more consistent effects. These results suggest that multi-targeting strategies may mitigate variability in clinical outcomes by buffering against pathway-specific resistance, consistent with findings from Tao et al. (2015) and Chen et al. (2019), who showed that drugs acting on multiple escape pathways are more likely to succeed clinically and overcome resistance mechanisms.
+
+Interestingly, while Figure 3 clearly supports the hypothesis, Figure 2 presents a more ambiguous pattern. In the scatterplot of target number versus standard deviation of IC50 values, no clear trend emerges across individual drugs. This discrepancy highlights an important methodological difference: Figure 2 plots unaggregated data without accounting for variability in sample sizes or cancer types, whereas Figure 3 groups drugs by specificity category and summarizes their variability. By aggregating the data, Figure 3 reveals a statistically meaningful pattern that might be obscured in more granular views. Thus, while both figures explore the same relationship, Figure 3 offers a stronger and more reliable foundation for interpretation.
+
+This apparent contradiction underscores the importance of how drug specificity is operationalized. In this analysis, specificity was measured solely by the number of annotated protein targets. While this approach is pragmatic and supported by drug-target databases, it does not capture qualitative differences between targets or account for functional redundancy and off-target effects, a limitation emphasized by Shoshan and Linder (2008). Their review underscores that many "targeted" therapies in fact derive their efficacy from interactions with multiple unintended pathways, complicating efforts to draw clean conclusions about specificity. This reinforces the idea that defining specificity through target count alone may obscure key mechanistic factors.
+
+One challenge that made the analysis less straightforward was the structure and abundance of IC50-related data. The dataset included a large number of IC50 measurements, but many were tied to specific features such as dose levels, experimental replicates, or contextual variables, rather than providing a single consolidated IC50 value for each drug and cell line combination. This complexity made it difficult to quickly summarize or compare baseline drug sensitivity across cell lines. Moreover, since the IC50 values depended on these varying experimental conditions, it raised questions about how best to aggregate or interpret them for broader analyses. Future studies could benefit from preprocessing steps that calculate standardized IC50 summaries for each cell line, or from including relevant metadata to help distinguish feature-specific differences. Creating a cleaner, more unified IC50 metric would likely improve the clarity of drug response patterns and enhance the reproducibility of similar studies.
+
+Overall, the findings suggest that multi-target drugs may offer a more stable therapeutic profile across patient populations, even within the same cancer subtype. While highly specific drugs are often favored for minimizing side effects, they may also introduce greater outcome variability. These results lend support to strategies that embrace rational polypharmacology, as advocated by Tao et al. (2015) and Chen et al. (2019), and call for a reassessment of how target breadth contributes to drug efficacy and predictability.
+
+
+**Literature Cited**
+
+Chen SY, Yang SY, Chen Z, Tan Y, Jiang YY, Chen YZ. 2019. Drug sales confirm clinical advantage of multi-target inhibition of drug escapes by anticancer kinase inhibitors. Drug Development Research 80:246–252. [doi:10.1002/ddr.21486]
+
+DepMap, Broad. 2024. DepMap 24Q4 Public. Figshare+. Dataset. [doi: 10.25452/figshare.plus.27993248.v1].
+
+Myers DJ, Wallen JM. 2025. Lung adenocarcinoma. In: StatPearls [Internet]. Treasure Island (FL): StatPearls Publishing; 2025 Jan–. [Updated 2023 Jun 12]. Available from: https://www.ncbi.nlm.nih.gov/books/NBK519578/
+
+OpenAI. 2025. ChatGPT (June 9 version) [large language model]. Available from: https://chat.openai.com
+
+Shoshan MC, Linder S. 2008. Target specificity and off-target effects as determinants of cancer drug efficacy. Expert Opinion on Drug Metabolism & Toxicology 4:273–280. [doi:10.1517/17425255.4.3.273]
+
+Tao L, Zhu F, Xu F, Chen Z, Jiang Y, Chen YZ. 2015. Co-targeting cancer drug escape pathways confers clinical advantage for multi-target anticancer drugs. Pharmacological Research 102:123–131. [doi:10.1016/j.phrs.2015.09.019]
+
+Thandra KC, Barsouk A, Saginala K, Aluru JS, Barsouk A. 2021. Epidemiology of lung cancer. Contemporary Oncology (Poznan) 25(1):45–52. [doi:10.5114/wo.2021.103829]
+
+
+**Note on use of AI.** Generative AI was used in assistance for writing some of the parsing code as well as for debugging code throughout the development of the project. It was used to assist with refining the discussion section by helping organize the finding and refine interpretations. All analysis, figures, and scientific conclusions were generated by the author. The language model did not generate original data or perform statistical tests.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
